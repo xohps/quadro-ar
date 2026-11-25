@@ -1,6 +1,7 @@
 // Entry point: start screen, asset loading, camera problems, the play button and the music.
 import CONFIG from './config.js';
 import { createKaraoke } from './karaoke.js';
+import { createInfoButton } from './info.js';
 import { createOverlay } from './overlay.js';
 import { parseLrc } from './lyrics.js';
 
@@ -410,6 +411,7 @@ function createDebug() {
 // ---------------------------------------------------------------- boot
 
 ui.retry.addEventListener('click', () => location.reload());
+createInfoButton(document.querySelector('.info'));
 ui.start.addEventListener('click', () => {
   unlockMedia();
   boot.then(({ arModule, loaded }) => startExperience(arModule, loaded)).catch((error) => {
