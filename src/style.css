@@ -44,11 +44,6 @@ svg { fill: currentColor; }
 .card { width: min(340px, 100%); text-align: center; }
 .card h1 { margin: 18px 0 12px; font: 400 30px/1.2 var(--serif); }
 .card p { margin: 0 0 12px; text-align: left; }
-.thumb {
-  display: inline-block; width: 132px; height: 176px; object-fit: cover;
-  padding: 7px 7px 20px; background: #fff; box-shadow: 0 8px 22px rgba(59, 47, 37, 0.3);
-  transform: rotate(-3deg);
-}
 .steps { margin: 0 0 22px; padding: 0; list-style: none; counter-reset: step; text-align: left; }
 .steps li { position: relative; padding-left: 36px; margin-bottom: 10px; counter-increment: step; }
 .steps li::before {
