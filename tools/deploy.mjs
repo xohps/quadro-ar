@@ -37,8 +37,13 @@ const scratch = mkdtempSync(join(tmpdir(), 'quadro-ar-deploy-'));
 try {
   const env = { ...process.env, GIT_INDEX_FILE: join(scratch, 'index') };
   // -f: no ignore rule may hide a file from the published copy.
-  git(['-c', 'core.safecrlf=false', 'add', '-A', '-f', '.'], { cwd: out, env });
+  // --work-tree: dist/ itself is the root of what gets published. Without it, git would
+  // file everything under a "dist/" folder and GitHub Pages would find no page at the root.
+  git(['--work-tree', out, '-c', 'core.safecrlf=false', 'add', '-A', '-f', '.'], { cwd: out, env });
   const tree = git(['write-tree'], { env });
+  if (!git(['ls-tree', '--name-only', tree]).split('\n').includes('index.html')) {
+    throw new Error('index.html is not at the root of the published folder.');
+  }
 
   let parent = '';
   try {
