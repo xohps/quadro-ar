@@ -44,13 +44,15 @@ svg { fill: currentColor; }
 .card { width: min(340px, 100%); text-align: center; }
 .card h1 { margin: 18px 0 12px; font: 400 30px/1.2 var(--serif); }
 .card p { margin: 0 0 12px; text-align: left; }
-.steps { margin: 0 0 22px; padding: 0; list-style: none; counter-reset: step; text-align: left; }
+.steps { margin: 0 0 12px; padding: 0; list-style: none; counter-reset: step; text-align: left; }
 .steps li { position: relative; padding-left: 36px; margin-bottom: 10px; counter-increment: step; }
 .steps li::before {
   content: counter(step); position: absolute; left: 0; top: 1px;
   width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px;
   background: var(--ink); color: var(--paper-light); font-size: 14px;
 }
+/* A quiet line about the camera, lined up with the text of the steps above it */
+.note { margin: 0 0 22px; padding-left: 36px; font-size: 14px; line-height: 1.45; color: var(--ink-soft); }
 .primary {
   display: block; width: 100%; padding: 14px 22px; border: 0; border-radius: 999px;
   background: var(--accent); color: #fff; font-size: 18px;
