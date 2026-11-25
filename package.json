@@ -1,0 +1,19 @@
+{
+  "name": "quadro-ar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WebAR for the printed frame: MindAR image tracking, animation over the print, karaoke lyrics",
+  "scripts": {
+    "setup": "npm install --ignore-scripts && node tools/vendor.mjs",
+    "start": "node tools/serve.mjs 8080",
+    "build": "node tools/stage.mjs",
+    "compile": "node tools/compile-target.mjs",
+    "test": "node --test \"test/**/*.test.mjs\" && node tools/e2e.mjs",
+    "test:dist": "node tools/e2e.mjs --dist"
+  },
+  "devDependencies": {
+    "mind-ar": "1.2.5",
+    "three": "0.160.0"
+  }
+}

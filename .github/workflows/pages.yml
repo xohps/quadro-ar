@@ -1,0 +1,36 @@
+# Publishes the site on GitHub Pages on every push to main.
+#
+# Only dist/ goes out (see tools/stage.mjs): pages, code, assets and libraries, never the
+# tools, the tests or the image the target was compiled from. The build step fails if any
+# file the page needs is missing, and a failed build publishes nothing.
+name: Publish site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One publication at a time; a newer push replaces an older one still in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: node tools/stage.mjs
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v5

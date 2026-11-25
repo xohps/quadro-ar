@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#efe4cc">
+  <meta name="robots" content="noindex">
+  <title>Aponte para o quadro</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./src/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/",
+      "mindar-image-three": "./vendor/mind-ar/mindar-image-three.prod.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- MindAR puts the camera video and its canvas in here -->
+  <div id="camera"></div>
+
+  <div id="hud">
+    <div id="hint" class="hidden" role="status">
+      <p id="hint-title"></p>
+      <p id="hint-text"></p>
+    </div>
+
+    <button id="play" class="hidden" type="button" aria-label="Tocar música">
+      <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.2v13.6L19.5 12z"/></svg>
+      <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z"/></svg>
+      <span id="play-hint">Toque para ouvir</span>
+    </button>
+
+    <section id="lyrics" class="hidden" aria-label="Letra da música">
+      <button id="toggle" type="button" aria-label="Tocar música">
+        <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.2v13.6L19.5 12z"/></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z"/></svg>
+      </button>
+      <div class="text">
+        <p class="title"></p>
+        <p class="current"></p>
+        <p class="next"></p>
+      </div>
+    </section>
+  </div>
+
+  <section id="intro" class="screen">
+    <div class="card">
+      <img class="thumb" src="./assets/thumb.jpg" alt="" width="270" height="360">
+      <h1>Aponte para o quadro</h1>
+      <ol class="steps">
+        <li>Permita o uso da câmera.</li>
+        <li>Aponte para o quadro e veja a imagem ganhar vida.</li>
+        <li>Toque no play para ouvir a música e acompanhar a letra.</li>
+      </ol>
+      <button id="start" class="primary" type="button" data-label="Iniciar" disabled>Preparando…</button>
+      <div id="progress" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <section id="error" class="screen hidden" role="alert">
+    <div class="card">
+      <h1 id="error-title"></h1>
+      <p id="error-text"></p>
+      <p id="error-hint" class="hint hidden"></p>
+      <button id="retry" class="primary" type="button">Tentar de novo</button>
+    </div>
+  </section>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

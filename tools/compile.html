@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compilar imagem-alvo · quadro-ar</title>
+<script type="importmap">
+{
+  "imports": {
+    "mindar-image": "../vendor/mind-ar/mindar-image.prod.js"
+  }
+}
+</script>
+<style>
+  :root { color-scheme: light; --paper: #efe4cc; --ink: #3b2f25; --accent: #c2593a; }
+  body { margin: 0; padding: 24px; background: var(--paper); color: var(--ink);
+         font: 16px/1.5 "Courier New", Courier, monospace; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-weight: normal; }
+  label { display: block; margin: 12px 0 4px; }
+  input[type="number"] { width: 6em; font: inherit; }
+  button { margin-top: 16px; padding: 10px 22px; border: 0; border-radius: 6px; cursor: pointer;
+           background: var(--accent); color: #fff; font: inherit; }
+  button:disabled { opacity: .5; cursor: wait; }
+  progress { width: 100%; margin-top: 16px; accent-color: var(--accent); }
+  #preview { display: block; width: 100%; margin-top: 16px; border: 1px solid #b9a888; }
+  #status { min-height: 1.5em; }
+  #status.error { color: #9b2c12; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Compilar imagem-alvo</h1>
+  <p>Transforma a imagem que foi impressa no arquivo que o MindAR usa para reconhecer o quadro.
+     Use exatamente o arquivo que foi para a impressão.</p>
+
+  <form id="form">
+    <label>Imagem impressa (ou um .mind para apenas inspecionar)
+      <input id="file" type="file" accept="image/*,.mind" required>
+    </label>
+    <label>Lado menor da imagem, em pixels
+      <input id="max" type="number" min="200" max="4096" step="1" value="1024">
+    </label>
+    <button id="run" type="submit">Compilar</button>
+  </form>
+
+  <progress id="progress" max="100" value="0" hidden></progress>
+  <p id="status" role="status"></p>
+  <canvas id="preview" hidden></canvas>
+  <p><button id="download" hidden>Baixar target.mind</button></p>
+</main>
+
+<script type="module">
+import { Compiler } from 'mindar-image';
+
+const $ = (id) => document.getElementById(id);
+const compiler = new Compiler();
+let blobUrl = null;
+
+const loadImage = (src) => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => reject(new Error('Não consegui abrir essa imagem.'));
+  img.src = src;
+});
+
+const readBuffer = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(new Error('Não consegui ler esse arquivo.'));
+  reader.readAsArrayBuffer(file);
+});
+
+// Shrinks the image so its shorter side is at most `max` pixels. A bigger image only makes
+// compiling slower and the .mind larger: the camera feed is low resolution, so the extra
+// detail levels are never matched.
+function fit(img, max) {
+  const ratio = Math.min(1, max / Math.min(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * ratio);
+  canvas.height = Math.round(img.naturalHeight * ratio);
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function setProgress(percent) {
+  $('progress').hidden = false;
+  $('progress').value = percent;
+  $('status').className = '';
+  $('status').textContent = `Compilando… ${percent.toFixed(0)}%`;
+}
+
+// Draws the image with the points the tracker holds on to, so it is easy to see whether
+// they spread over the whole picture instead of clustering in one spot. There is one
+// level with a 256px short side and one with 128px, each in its own pixel coordinates.
+function showPoints(image, data) {
+  const { width, height } = data.targetImage;
+  const levels = data.trackingData;
+  const canvas = $('preview');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (image) context.drawImage(image, 0, 0);
+  const colors = ['#20c060', '#f0a020'];
+  levels.forEach((level, index) => {
+    context.fillStyle = colors[index % colors.length];
+    for (const { x, y } of level.points) {
+      context.fillRect(Math.round((x / level.width) * width) - 2, Math.round((y / level.height) * height) - 2, 4, 4);
+    }
+  });
+  canvas.hidden = false;
+  const count = levels.reduce((total, level) => total + level.points.length, 0);
+  return `${width} × ${height} px · ${count} pontos de rastreamento`;
+}
+
+function offerDownload(buffer) {
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  blobUrl = URL.createObjectURL(new Blob([buffer]));
+  const button = $('download');
+  button.hidden = false;
+  button.onclick = () => {
+    const link = document.createElement('a');
+    link.download = 'target.mind';
+    link.href = blobUrl;
+    link.click();
+  };
+}
+
+const toBase64 = (buffer) => {
+  let text = '';
+  for (let i = 0; i < buffer.length; i += 0x8000) {
+    text += String.fromCharCode.apply(null, buffer.subarray(i, i + 0x8000));
+  }
+  return btoa(text);
+};
+
+async function compile(image, max) {
+  const canvas = fit(image, max);
+  const dataList = await compiler.compileImageTargets([canvas], setProgress);
+  return { canvas, data: dataList[0], buffer: compiler.exportData() };
+}
+
+async function run(image, max) {
+  const { canvas, data, buffer } = await compile(image, max);
+  const summary = showPoints(canvas, data);
+  offerDownload(buffer);
+  $('status').textContent = `${summary} · arquivo de ${(buffer.length / 1024).toFixed(0)} KB`;
+  return { canvas, data, buffer };
+}
+
+$('form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const file = $('file').files[0];
+  if (!file) return;
+  $('run').disabled = true;
+  $('download').hidden = true;
+  try {
+    if (file.name.toLowerCase().endsWith('.mind')) {
+      const [data] = compiler.importData(await readBuffer(file));
+      if (!data) throw new Error('Esse .mind é de uma versão antiga. Recompile a imagem.');
+      $('status').textContent = showPoints(null, data);
+    } else {
+      await run(await loadImage(URL.createObjectURL(file)), Number($('max').value) || 1024);
+    }
+  } catch (error) {
+    $('status').className = 'error';
+    $('status').textContent = `Falhou: ${error.message}`;
+  } finally {
+    $('run').disabled = false;
+    $('progress').hidden = true;
+  }
+});
+
+// ?image=<url> compiles without interaction. tools/compile-target.mjs reads the result.
+const params = new URLSearchParams(location.search);
+if (params.has('image')) {
+  window.__compile = (async () => {
+    try {
+      const { canvas, data, buffer } = await run(await loadImage(params.get('image')), Number(params.get('max') || 1024));
+      return {
+        ok: true,
+        width: canvas.width,
+        height: canvas.height,
+        points: data.trackingData.reduce((total, level) => total + level.points.length, 0),
+        bytes: buffer.length,
+        base64: toBase64(buffer),
+      };
+    } catch (error) {
+      return { ok: false, error: String(error?.stack || error) };
+    }
+  })();
+}
+</script>
+</body>
+</html>

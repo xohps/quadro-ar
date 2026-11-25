@@ -1,0 +1,158 @@
+:root {
+  --paper: #efe4cc;
+  --paper-light: #fbf5e8;
+  --ink: #3b2f25;
+  --ink-soft: rgba(59, 47, 37, 0.62);
+  --ink-faint: rgba(59, 47, 37, 0.4);
+  --accent: #c2593a;
+  --night: #1d1813;
+  --serif: Georgia, "Times New Roman", serif;
+  --type: "Courier New", Courier, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.45 var(--type);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+.hidden { display: none !important; }
+svg { fill: currentColor; }
+
+/* ---- camera: MindAR appends its video (z-index -2) and canvas inside this stacking context */
+#camera { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: var(--night); }
+
+/* ---- heads-up layer: blocks no touches except on its own controls */
+#hud { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+#hud button { pointer-events: auto; }
+
+/* ---- full screens: start and error */
+.screen {
+  position: fixed; inset: 0; z-index: 3;
+  overflow-y: auto; display: grid; align-content: center; justify-items: center;
+  padding: 24px calc(24px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) calc(24px + env(safe-area-inset-left, 0px));
+  background:
+    radial-gradient(120% 90% at 15% 5%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(100% 80% at 95% 100%, rgba(125, 148, 113, 0.26), transparent 60%),
+    var(--paper);
+}
+.card { width: min(340px, 100%); text-align: center; }
+.card h1 { margin: 18px 0 12px; font: 400 30px/1.2 var(--serif); }
+.card p { margin: 0 0 12px; text-align: left; }
+.thumb {
+  display: inline-block; width: 132px; height: 176px; object-fit: cover;
+  padding: 7px 7px 20px; background: #fff; box-shadow: 0 8px 22px rgba(59, 47, 37, 0.3);
+  transform: rotate(-3deg);
+}
+.steps { margin: 0 0 22px; padding: 0; list-style: none; counter-reset: step; text-align: left; }
+.steps li { position: relative; padding-left: 36px; margin-bottom: 10px; counter-increment: step; }
+.steps li::before {
+  content: counter(step); position: absolute; left: 0; top: 1px;
+  width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px;
+  background: var(--ink); color: var(--paper-light); font-size: 14px;
+}
+.primary {
+  display: block; width: 100%; padding: 14px 22px; border: 0; border-radius: 999px;
+  background: var(--accent); color: #fff; font-size: 18px;
+  box-shadow: 0 6px 16px rgba(194, 89, 58, 0.38);
+}
+.primary:disabled { opacity: 0.55; cursor: wait; box-shadow: none; }
+.primary:active:not(:disabled) { transform: translateY(1px); }
+#progress {
+  height: 3px; margin: 14px 12px 0; border-radius: 2px; background: rgba(59, 47, 37, 0.16);
+  transform: scaleX(0); transform-origin: left; transition: transform 0.2s;
+}
+.hint { padding: 10px 12px; border-radius: 10px; background: rgba(125, 148, 113, 0.22); }
+
+/* ---- hint over the camera */
+#hint {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max-content; max-width: min(320px, calc(100vw - 40px)); padding: 18px 20px;
+  text-align: center; background: rgba(29, 24, 19, 0.78); color: var(--paper-light);
+  border-radius: 14px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+#hint p { margin: 0; }
+#hint #hint-text { margin-top: 6px; font-size: 14px; opacity: 0.85; }
+#hint.compact { top: calc(14px + env(safe-area-inset-top, 0px)); transform: translate(-50%, 0); padding: 10px 16px; font-size: 14px; }
+#hint.compact #hint-text { display: none; }
+#hint.busy #hint-title::before {
+  content: ""; display: inline-block; width: 13px; height: 13px; margin-right: 9px; vertical-align: -1px;
+  border: 2px solid rgba(255, 255, 255, 0.35); border-top-color: #fff; border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(1turn); } }
+
+/* ---- play button, pinned to a spot on the print */
+#play {
+  position: fixed; left: 0; top: 0; width: 68px; height: 68px; margin: 0;
+  display: grid; place-items: center; border: 0; border-radius: 50%;
+  background: rgba(251, 245, 232, 0.94); color: var(--accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4), 0 0 0 3px var(--ink);
+  will-change: transform;
+}
+#play svg { width: 42%; height: 42%; }
+#play .icon-play { margin-left: 3px; }
+#play::after {
+  content: ""; position: absolute; inset: -9px; border-radius: 50%;
+  border: 3px solid rgba(251, 245, 232, 0.8); animation: pulse 2.2s ease-out infinite;
+}
+@keyframes pulse { from { transform: scale(0.82); opacity: 0.95; } to { transform: scale(1.55); opacity: 0; } }
+#play-hint {
+  position: absolute; top: calc(100% + 16px); left: 50%; transform: translateX(-50%);
+  padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+  background: rgba(29, 24, 19, 0.78); color: var(--paper-light); font-size: 13px;
+}
+body[data-music="playing"] #play::after { animation: none; opacity: 0; }
+body[data-music="playing"] #play-hint,
+body[data-music="paused"] #play-hint { display: none; }
+
+/* ---- one icon or the other, depending on whether the song is playing */
+.icon-pause { display: none; }
+body[data-music="playing"] .icon-play { display: none; }
+body[data-music="playing"] .icon-pause { display: block; }
+
+/* ---- lyrics */
+#lyrics {
+  position: fixed; left: 0; right: 0; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  width: calc(100% - 24px); max-width: 560px; margin: 0 auto;
+  display: flex; align-items: center; gap: 12px; padding: 12px 12px 14px 8px;
+  background: var(--paper-light); border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.38);
+  animation: rise 0.35s ease-out;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+#toggle {
+  flex: none; display: grid; place-items: center; width: 46px; height: 46px;
+  border: 0; border-radius: 50%; background: var(--accent); color: #fff;
+}
+#toggle svg { width: 22px; height: 22px; }
+#toggle .icon-play { margin-left: 2px; }
+#lyrics .text { flex: 1; min-width: 0; text-align: center; }
+#lyrics .title { margin: 0; font-size: 12px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#lyrics .current { margin: 2px 0 0; font-size: 20px; font-weight: 700; line-height: 1.35; }
+#lyrics .current.waiting { color: var(--accent); animation: note 1.6s ease-in-out infinite; }
+@keyframes note { 50% { transform: translateY(-3px); } }
+#lyrics .next { margin: 4px 0 0; font-size: 14px; color: var(--ink-soft); }
+.word { color: var(--ink-faint); }
+.word.sung { color: var(--accent); }
+/* The word being sung fills from left to right with the song's own colour. */
+.word.active {
+  color: transparent; -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(90deg, var(--accent) var(--fill, 0%), var(--ink-faint) var(--fill, 0%));
+  -webkit-background-clip: text; background-clip: text;
+}
+
+/* ---- diagnostics, only with ?debug in the address */
+#debug {
+  position: fixed; left: 8px; top: 8px; z-index: 9; margin: 0; max-width: 62vw; padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.72); color: #b8f5c0; font: 11px/1.45 var(--type); white-space: pre-wrap;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #play::after, #lyrics, #lyrics .current.waiting { animation: none; }
+}
