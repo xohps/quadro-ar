@@ -113,11 +113,14 @@ O build para com erro se algum arquivo que a página precisa estiver faltando, e
 O site funciona tanto num endereço próprio quanto numa subpasta (como
 `usuario.github.io/repositorio/`), porque todos os caminhos são relativos.
 
-### GitHub Pages (atualiza a cada `git push`)
+### GitHub Pages (atualiza com `npm run deploy`)
 
-No plano gratuito o repositório precisa ser público. O workflow `.github/workflows/pages.yml`
-publica o site a cada envio para o branch `main`, no endereço
-`https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/`.
+O projeto está publicado em https://xohps.github.io/quadro-ar/. No plano gratuito o
+repositório precisa ser público.
+
+O branch `main` guarda o código. O branch `gh-pages` guarda só a pasta `dist/` e é o que o
+GitHub Pages serve. `npm run deploy` refaz a pasta e envia esse branch, sem tocar no `main`.
+Para guardar as mudanças no código, faça o commit e o `git push` como de costume.
 
 Depois de uma atualização, o GitHub Pages pode seguir entregando a versão anterior por até
 10 minutos. Para testar no celular sem esperar, abra o site numa aba privada.
@@ -202,8 +205,7 @@ src/style.css
 assets/             alvo, vídeo, música, letra, miniatura
 vendor/             three.js e MindAR, copiados por tools/vendor.mjs
 dist/               o site pronto para publicar, criado por npm run build
-.github/workflows/  publicação no GitHub Pages a cada git push
-tools/              servidor, build, compilador do alvo, gerador dos provisórios, testes
+tools/              servidor, build, publicação, compilador do alvo, gerador dos provisórios, testes
 test/               testes unitários
 ```
 
