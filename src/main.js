@@ -41,6 +41,62 @@ const noteAudio = (type) => {
   if (audioEvents.length > 12) audioEvents.shift();
 };
 
+// ---------------------------------------------------------------- where the song is
+//
+// The browser reports how far the song has got, and that is what the lyrics go by. On
+// some phones that reading can stand still while the sound plays, so it is watched: if
+// it does not move for a couple of seconds, the time is kept here from that point on.
+
+const now = () => performance.now();
+let clockFrom = 0; // song time when the count last stopped (or where the browser says it is)
+let clockAt = 0; // when the count (re)started
+let counting = false; // the song is playing and the count is running
+let ownClock = false; // the browser's reading stood still, so the count is what counts
+let reading = 0; // the last reading seen, and when
+let readingAt = 0;
+
+function keepTime(event) {
+  const at = now();
+  if (event === 'playing') {
+    if (!ownClock) {
+      clockFrom = audio.currentTime || 0;
+      reading = clockFrom;
+      readingAt = at;
+    }
+    counting = true;
+  } else if (event === 'seeked') {
+    ownClock = false; // give the browser's reading a fresh chance from the new position
+    clockFrom = audio.currentTime || 0;
+    reading = clockFrom;
+    readingAt = at;
+  } else if (counting) {
+    // Paused, waiting or over: stop the count where it is.
+    if (ownClock) clockFrom += (at - clockAt) / 1000;
+    else clockFrom = audio.currentTime || clockFrom;
+    counting = false;
+  }
+  clockAt = at;
+}
+
+function watchClock() {
+  if (audio.paused || ownClock) return;
+  const at = now();
+  if (Math.abs(audio.currentTime - reading) > 0.05) {
+    reading = audio.currentTime;
+    readingAt = at;
+  } else if (at - readingAt > 2000) {
+    ownClock = true;
+    clockFrom = reading; // where the song was when its reading last moved
+    clockAt = readingAt; // and when that was
+    noteAudio('reading-still:keeping-time-here');
+  }
+}
+
+function songTime() {
+  if (!ownClock) return audio.paused ? clockFrom : audio.currentTime;
+  return counting ? clockFrom + (now() - clockAt) / 1000 : clockFrom;
+}
+
 // ---------------------------------------------------------------- loading
 
 // Reads a response piece by piece so the start screen can show how far along it is.
@@ -127,11 +183,16 @@ function createMedia(loaded) {
     });
     // A second driver for the lyrics, in case the drawing loop ever stops or stalls.
     audio.addEventListener('timeupdate', () => {
-      if (karaoke && !audio.paused) karaoke.update(audio.currentTime);
+      watchClock();
+      if (karaoke && !audio.paused) karaoke.update(songTime());
     });
-    for (const type of ['playing', 'error', 'stalled', 'waiting', 'suspend', 'abort', 'canplay']) {
+    for (const type of ['playing', 'error', 'stalled', 'waiting', 'suspend', 'abort', 'canplay', 'seeking']) {
       audio.addEventListener(type, () => noteAudio(type));
     }
+    // Keep track of where the song is, so that the lyrics can go by this count if the
+    // browser's own reading of it stands still.
+    for (const type of ['playing', 'pause', 'waiting', 'ended']) audio.addEventListener(type, () => keepTime(type));
+    audio.addEventListener('seeked', () => keepTime('seeked'));
   }
   // The sheet doubles as the pause control, so it exists even without lyrics.
   if (loaded.music || loaded.lyrics) {
@@ -375,7 +436,7 @@ function frame(now) {
   guard('drawing', () => ar.renderer.render(ar.scene, ar.camera));
   guard('button', placePlayButton);
   guard('lyrics', () => {
-    if (karaoke && !audio.paused) karaoke.update(audio.currentTime);
+    if (karaoke && !audio.paused) karaoke.update(songTime());
   });
   debug?.tick(now);
 }
@@ -437,6 +498,7 @@ function createDebug() {
         time: +audio.currentTime.toFixed(2), paused: audio.paused, muted: audio.muted,
         ready: audio.readyState, network: audio.networkState, error: audio.error?.code ?? null,
         duration: +audio.duration?.toFixed?.(2),
+        ownClock,
       },
       audioEvents,
       faults,
@@ -445,7 +507,7 @@ function createDebug() {
       playButtonVisible: !ui.play.classList.contains('hidden'),
       hintVisible: !ui.hint.classList.contains('hidden'),
       lyricsVisible: !ui.lyrics.classList.contains('hidden'),
-      line: ui.lyrics.querySelector('.current')?.textContent ?? null,
+      line: ui.lyrics.querySelector('.base')?.textContent ?? ui.lyrics.querySelector('.note')?.textContent ?? null,
       activeWord: ui.lyrics.querySelector('.word.active')?.textContent ?? null,
       sungWords: ui.lyrics.querySelectorAll('.word.sung').length,
       lang: karaoke?.language ?? null,

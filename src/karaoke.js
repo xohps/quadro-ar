@@ -1,5 +1,12 @@
 // The bottom sheet that shows the line being sung, filled in word by word, and the next one.
-// When translations are available, a switch on its top edge swaps the text for one of them.
+//
+// The line is written twice, one copy over the other: a faint one underneath and a bright
+// one on top, uncovered from left to right as the song goes. Only that uncovering changes
+// from moment to moment; the words themselves do not. Nothing here relies on repainting
+// text through a changing background or on animating the element whose content changes,
+// as phones' browsers are uneven at both.
+//
+// When translations are available, a switch on the sheet's top edge swaps the text for one.
 import { activeIndex, wordAt } from './lyrics.js';
 
 const REMEMBERED = 'quadro-ar:lyrics-language';
@@ -20,7 +27,9 @@ export function createKaraoke(root, { languages }) {
 
   let shown = -2; // line index on screen; no line is -1, so this forces the first render
   let activeWord = -2;
-  let spans = [];
+  let track = null; // what the current line is made of: the words, and the bright copy
+  let words = []; // one span per word, the copy that is read
+  let bright = []; // the same words, uncovered as they are sung
   let lastTime = 0;
 
   function render(index) {
@@ -29,25 +38,35 @@ export function createKaraoke(root, { languages }) {
     const line = lines[index];
     // No line yet, or a line that is only a timestamp: an instrumental break.
     const instrumental = !line || !line.text;
-    spans = instrumental ? [] : line.words.map((word) => {
-      const span = document.createElement('span');
-      span.className = 'word';
-      span.textContent = word.text;
-      return span;
-    });
+    track = document.createElement('span');
+    track.className = 'track hop';
     if (instrumental) {
-      // Show a note and preview the next line that is sung.
-      current.classList.add('waiting');
-      current.replaceChildren('♪');
+      // A note, with the next line that is sung as a preview.
+      const note = document.createElement('span');
+      note.className = 'note';
+      note.textContent = '♪';
+      track.replaceChildren(note);
+      words = bright = [];
     } else {
-      current.classList.remove('waiting');
-      current.replaceChildren(...spans);
-      // A small hop as each line arrives.
-      current.animate(
-        [{ opacity: 0.2, transform: 'translateY(7px)' }, { opacity: 1, transform: 'none' }],
-        { duration: 300, easing: 'ease-out' },
-      );
+      const copy = () => line.words.map((word) => {
+        const span = document.createElement('span');
+        span.className = 'word';
+        span.textContent = word.text;
+        return span;
+      });
+      words = copy();
+      bright = copy();
+      const base = document.createElement('span');
+      base.className = 'base';
+      base.replaceChildren(...words);
+      const fill = document.createElement('span');
+      fill.className = 'fill';
+      fill.setAttribute('aria-hidden', 'true'); // the same words once more, for the eyes only
+      fill.replaceChildren(...bright);
+      track.replaceChildren(base, fill);
     }
+    current.replaceChildren(track);
+
     const upcoming = lines.slice(index + 1).find((entry) => entry.text);
     next.textContent = upcoming?.text ?? '';
     next.classList.toggle('hidden', !next.textContent);
@@ -94,14 +113,17 @@ export function createKaraoke(root, { languages }) {
     }
     if (!line || !line.text) return;
 
-    const { index: word, fraction } = wordAt(lines[index], time);
+    const { index: word, fraction } = wordAt(line, time);
     if (word !== activeWord) {
       activeWord = word;
-      spans.forEach((span, i) => {
-        span.className = i < word ? 'word sung' : i === word ? 'word active' : 'word';
+      words.forEach((span, position) => {
+        span.className = position < word ? 'word sung' : position === word ? 'word active' : 'word';
       });
     }
-    if (word >= 0) spans[word].style.setProperty('--fill', `${(fraction * 100).toFixed(1)}%`);
+    // Uncover the bright copy up to the point being sung. Everything to the left is
+    // uncovered on every row, so the lines already sung come out whole.
+    const edge = word >= 0 ? bright[word].offsetLeft + bright[word].offsetWidth * fraction : 0;
+    track.lastElementChild.style.clipPath = `inset(0 ${Math.max(track.clientWidth - edge, 0).toFixed(1)}px 0 0)`;
   }
 
   return { update, setLanguage, get language() { return language; }, get index() { return shown; } };
