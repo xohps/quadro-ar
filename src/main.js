@@ -34,6 +34,12 @@ let lyricLanguages; // the lyrics in each language the sheet can show
 let wantMusic = false; // what the person asked for, so unlocking never pauses a song
 let unlocking = false; // the song is playing only to be allowed to play later
 let playButtonAt = null;
+const audioEvents = []; // what happened to the song, kept for the diagnostics panel
+const noteAudio = (type) => {
+  if (!DEBUG || !audio) return;
+  audioEvents.push(`${type}@${audio.currentTime.toFixed(1)}`);
+  if (audioEvents.length > 12) audioEvents.shift();
+};
 
 // ---------------------------------------------------------------- loading
 
@@ -104,16 +110,28 @@ function createMedia(loaded) {
     // pause it raises are not the person's choice. The flag drops on that pause event,
     // which the browser delivers only after the unlocking code has finished.
     audio.addEventListener('play', () => {
+      noteAudio('play');
       if (!unlocking) setMusic('playing');
     });
     audio.addEventListener('pause', () => {
+      noteAudio('pause');
       if (unlocking) {
         unlocking = false;
         return;
       }
       if (!audio.ended) setMusic('paused');
     });
-    audio.addEventListener('ended', () => setMusic('idle'));
+    audio.addEventListener('ended', () => {
+      noteAudio('ended');
+      setMusic('idle');
+    });
+    // A second driver for the lyrics, in case the drawing loop ever stops or stalls.
+    audio.addEventListener('timeupdate', () => {
+      if (karaoke && !audio.paused) karaoke.update(audio.currentTime);
+    });
+    for (const type of ['playing', 'error', 'stalled', 'waiting', 'suspend', 'abort', 'canplay']) {
+      audio.addEventListener(type, () => noteAudio(type));
+    }
   }
   // The sheet doubles as the pause control, so it exists even without lyrics.
   if (loaded.music || loaded.lyrics) {
@@ -240,12 +258,21 @@ function unlockMedia() {
   }
   if (audio) {
     // It plays muted for an instant, so the pause that follows must not read as "paused".
+    // A camera permission prompt can interrupt that instant on an iPhone, so give up
+    // waiting after a few seconds: the song has to end up paused and unmuted either way.
     const unlocked = () => {
+      clearTimeout(patience);
       audio.muted = false;
       if (wantMusic) audio.play().catch(() => {});
     };
     unlocking = true;
     audio.muted = true;
+    const patience = setTimeout(() => {
+      // `unlocking` stays until the pause event clears it, so that this pause is not
+      // mistaken for the person pausing a song.
+      audio.pause();
+      unlocked();
+    }, 4000);
     audio.play().then(() => {
       audio.pause();
       audio.currentTime = 0;
@@ -327,15 +354,29 @@ async function startExperience(arModule, loaded) {
 
 // ---------------------------------------------------------------- every frame
 
+const faults = {}; // what went wrong in each part of a frame, the first time it did
+
+// Runs one part of a frame so that a failure in it is recorded instead of thrown: the
+// drawing loop does not come back from an exception, and that would freeze everything.
+function guard(label, action) {
+  try {
+    action();
+  } catch (error) {
+    faults[label] ??= String(error?.message || error);
+  }
+}
+
 let lastFrame = 0;
 function frame(now) {
   const dt = lastFrame ? Math.min((now - lastFrame) / 1000, 0.1) : 0;
   lastFrame = now;
 
-  overlay?.update(dt);
-  ar.renderer.render(ar.scene, ar.camera);
-  placePlayButton();
-  if (karaoke && !audio.paused) karaoke.update(audio.currentTime);
+  guard('overlay', () => overlay?.update(dt));
+  guard('drawing', () => ar.renderer.render(ar.scene, ar.camera));
+  guard('button', placePlayButton);
+  guard('lyrics', () => {
+    if (karaoke && !audio.paused) karaoke.update(audio.currentTime);
+  });
   debug?.tick(now);
 }
 
@@ -359,9 +400,15 @@ function placePlayButton() {
 function toggleMusic() {
   if (!audio) return;
   unlocking = false;
+  audio.muted = false; // should already be; never let a half-finished unlock silence the song
   wantMusic = audio.paused;
-  if (wantMusic) audio.play().catch(() => {});
-  else audio.pause();
+  if (wantMusic) {
+    audio.play().catch((error) => {
+      noteAudio(`play-refused:${error?.name || 'error'}`);
+    });
+  } else {
+    audio.pause();
+  }
 }
 
 // ---------------------------------------------------------------- debug (?debug in the URL)
@@ -386,7 +433,13 @@ function createDebug() {
       ...state,
       warnings,
       video: video && { time: +video.currentTime.toFixed(2), paused: video.paused, ready: video.readyState, width: video.videoWidth, height: video.videoHeight },
-      audio: audio && { time: +audio.currentTime.toFixed(2), paused: audio.paused, ready: audio.readyState, duration: +audio.duration?.toFixed?.(2) },
+      audio: audio && {
+        time: +audio.currentTime.toFixed(2), paused: audio.paused, muted: audio.muted,
+        ready: audio.readyState, network: audio.networkState, error: audio.error?.code ?? null,
+        duration: +audio.duration?.toFixed?.(2),
+      },
+      audioEvents,
+      faults,
       overlay: overlay && { opacity: +overlay.opacity.toFixed(2), masked: overlay.masked },
       playButton: playButtonAt && { x: +playButtonAt.x.toFixed(1), y: +playButtonAt.y.toFixed(1) },
       playButtonVisible: !ui.play.classList.contains('hidden'),
@@ -428,7 +481,10 @@ function createDebug() {
       panel.hidden = false;
       panel.textContent = `${s.phase} tracking=${s.tracking} music=${s.music} fps=${fps}\n`
         + `video ${JSON.stringify(s.video)}\noverlay ${JSON.stringify(s.overlay)}\naudio ${JSON.stringify(s.audio)}\n`
-        + `button ${JSON.stringify(s.playButton)}\n${warnings.join('\n')}`;
+        + `button ${JSON.stringify(s.playButton)}\nlyrics #${s.lineIndex} ${JSON.stringify((s.line ?? '').trim())}\n`
+        + `events ${s.audioEvents.join(' ')}\n`
+        + (Object.keys(s.faults).length ? `faults ${JSON.stringify(s.faults)}\n` : '')
+        + warnings.join('\n');
     },
   };
 }
