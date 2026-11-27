@@ -129,7 +129,7 @@ function createMedia(loaded) {
     for (const [name, { file, label, description }] of Object.entries(CONFIG.music.translations)) {
       const source = loaded[`lyrics:${name}`];
       if (!source) continue; // missing or failed to load: its switch simply does not appear
-      const translation = parseLrc(source, { keepEmpty: true });
+      const translation = parseLrc(source);
       const { lines, untranslated } = alignTranslation(original.lines, translation.lines);
       if (untranslated) warnings.push(`A tradução em ${name} (${file}) não cobre ${untranslated} linha(s); nessas aparece a original.`);
       languages[name] = { label, description, title: translation.title || languages.original.title, lines };
@@ -379,6 +379,9 @@ function createDebug() {
   window.__ar = {
     start: () => ui.start.click(),
     toggleMusic,
+    seek: (seconds) => {
+      audio.currentTime = Math.max(0, Math.min(seconds, (audio.duration || seconds) - 0.5));
+    },
     state: () => ({
       ...state,
       warnings,
@@ -393,6 +396,7 @@ function createDebug() {
       activeWord: ui.lyrics.querySelector('.word.active')?.textContent ?? null,
       sungWords: ui.lyrics.querySelectorAll('.word.sung').length,
       lang: karaoke?.language ?? null,
+      firstLineAt: lyricLanguages?.original.lines.find((line) => line.text)?.start ?? 0,
       lineIndex: karaoke?.index ?? null,
       lyricsText: lyricLanguages && Object.fromEntries(
         Object.entries(lyricLanguages).map(([name, value]) => [name, value.lines.map((line) => line.text)])),

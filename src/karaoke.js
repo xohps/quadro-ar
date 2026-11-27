@@ -26,14 +26,17 @@ export function createKaraoke(root, { languages }) {
   function render(index) {
     activeWord = -2;
     const lines = languages[language].lines;
-    spans = index === -1 ? [] : lines[index].words.map((word) => {
+    const line = lines[index];
+    // No line yet, or a line that is only a timestamp: an instrumental break.
+    const instrumental = !line || !line.text;
+    spans = instrumental ? [] : line.words.map((word) => {
       const span = document.createElement('span');
       span.className = 'word';
       span.textContent = word.text;
       return span;
     });
-    if (index === -1) {
-      // Instrumental intro: show a note and preview the first line.
+    if (instrumental) {
+      // Show a note and preview the next line that is sung.
       current.classList.add('waiting');
       current.replaceChildren('♪');
     } else {
@@ -45,7 +48,8 @@ export function createKaraoke(root, { languages }) {
         { duration: 300, easing: 'ease-out' },
       );
     }
-    next.textContent = lines[index + 1]?.text ?? '';
+    const upcoming = lines.slice(index + 1).find((entry) => entry.text);
+    next.textContent = upcoming?.text ?? '';
     next.classList.toggle('hidden', !next.textContent);
     title.textContent = languages[language].title ?? '';
     title.classList.toggle('hidden', !title.textContent);
@@ -83,11 +87,12 @@ export function createKaraoke(root, { languages }) {
     lastTime = time;
     const lines = languages[language].lines;
     const index = activeIndex(lines, time);
+    const line = lines[index];
     if (index !== shown) {
       shown = index;
       render(index);
     }
-    if (index === -1) return;
+    if (!line || !line.text) return;
 
     const { index: word, fraction } = wordAt(lines[index], time);
     if (word !== activeWord) {

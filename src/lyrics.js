@@ -3,8 +3,11 @@
 //
 // A parsed file looks like:
 //   { title, lines: [{ start, end, text, words: [{ text, start }] }] }
-// where `end` is when the highlight finishes (the next line or an estimate of the singing
-// time) and each word keeps its trailing space.
+// where `end` is when the highlight finishes: the start of the next line, or the time the
+// line says it is sung through, or an estimate. Each word keeps its trailing space.
+//
+// A line that is only a timestamp marks an instrumental break: it has no words, and the
+// screen shows a note from then until the next line.
 
 const TIME = '\\[(\\d{1,3}):(\\d{1,2})(?:[.:](\\d{1,3}))?\\]';
 const LEADING_TAG = new RegExp(`^${TIME}`);
@@ -38,22 +41,28 @@ export function spreadWords(text, start, end) {
 }
 
 // `body` is the line without its leading timestamps. In the "enhanced" format it carries
-// a timestamp before each word; text ahead of the first one is timed at `wordStart`.
+// a timestamp before each word; text ahead of the first one is timed at `wordStart`. An
+// empty timestamp after the last word says when the line is sung through.
 function buildLine(start, wordStart, body, shift) {
   const words = [];
   let cursor = 0;
   let time = wordStart;
+  let end = null;
   const add = (text) => words.push(...tokenize(text).map((word) => ({ text: word, start: time })));
   for (const match of body.matchAll(INLINE_TAG)) {
     add(body.slice(cursor, match.index));
     time = tagSeconds(match) + shift;
     cursor = match.index + match[0].length;
+    if (!body.slice(cursor).trim()) {
+      end = time; // nothing follows this tag: it closes the line
+      break;
+    }
   }
   add(body.slice(cursor));
-  return { start, end: Infinity, text: words.map((word) => word.text).join('').trim(), words };
+  return { start, end, text: words.map((word) => word.text).join('').trim(), words };
 }
 
-export function parseLrc(source, { offsetMs = 0, keepEmpty = false } = {}) {
+export function parseLrc(source, { offsetMs = 0 } = {}) {
   let shift = offsetMs / 1000;
   let title = '';
   const lines = [];
@@ -79,9 +88,8 @@ export function parseLrc(source, { offsetMs = 0, keepEmpty = false } = {}) {
     }
     if (!starts.length) continue;
     if (!body.trim()) {
-      // A timed line with no words marks a gap. Lyrics skip it; a translation keeps it, so
-      // that its lines stay lined up with the original's.
-      if (keepEmpty) for (const start of starts) lines.push({ start, end: start, text: '', words: [] });
+      // Only a timestamp: an instrumental break, shown as a note until the next line.
+      for (const start of starts) lines.push({ start, end: start, text: '', words: [] });
       continue;
     }
     // `search` ignores the lastIndex that a global regex would carry between lines.
@@ -92,9 +100,10 @@ export function parseLrc(source, { offsetMs = 0, keepEmpty = false } = {}) {
   lines.sort((a, b) => a.start - b.start);
   lines.forEach((line, index) => {
     const next = lines[index + 1]?.start ?? Infinity;
-    line.end = Math.min(next, line.start + line.text.length * SECONDS_PER_CHAR);
+    const estimated = line.start + line.text.length * SECONDS_PER_CHAR;
+    line.end = Math.min(next, line.end ?? estimated);
     if (line.words.length > 1 && line.words.every((word) => word.start === line.start)) {
-      // One timestamp for the whole line: spread the words by their length.
+      // One timestamp for the whole line: spread the words over the time it has.
       line.words = spreadWords(line.text, line.start, line.end);
     }
   });
@@ -130,12 +139,13 @@ export function wordAt(line, time) {
 
 // Pairs a translation with the original, line by line and in order. A translated line takes
 // the timing of the original, since the original is what is being sung: it appears when
-// that line is sung, and its words light up at a reading pace. A line with no translation
-// keeps the original words, so nothing goes missing. Tells how many lines those were.
+// that line is sung, and its words light up at a reading pace. A sung line with no
+// translation keeps the original words, so nothing goes missing; instrumental breaks have
+// no words in either language. Tells how many sung lines had no translation.
 export function alignTranslation(original, translated) {
   const lines = original.map((line, index) => {
     const text = translated[index]?.text;
     return text ? { start: line.start, end: line.end, text, words: spreadWords(text, line.start, line.end) } : line;
   });
-  return { lines, untranslated: original.filter((_, index) => !translated[index]?.text).length };
+  return { lines, untranslated: original.filter((line, index) => line.text && !translated[index]?.text).length };
 }
