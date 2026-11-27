@@ -18,6 +18,13 @@ const CONFIG = {
     lyrics: 'assets/lyrics.lrc',
     title: '', // used when the .lrc has no [ti:] tag
     offsetMs: 0, // positive shows the lyrics later, negative earlier
+    originalLabel: 'PT', // what the switch calls the original text
+    // Translations, one entry per language. Each file must have one line for each line of
+    // the original, in the same order; its timestamps are ignored, because the original is
+    // what is sung and sets the timing. A missing or empty line shows the original there.
+    translations: {
+      en: { file: 'assets/lyrics.en.lrc', label: 'EN', description: 'Letra traduzida em inglês' },
+    },
   },
 
   // Where the play button sits on the print: 0 to 1 from the left and from the top.

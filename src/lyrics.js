@@ -24,6 +24,19 @@ const tagSeconds = (match) => {
 // Splits "word word " into tokens that keep their trailing whitespace.
 const tokenize = (text) => text.match(/\S+\s*|\s+/g) || [];
 
+// Splits `text` into words spread evenly from `start` to `end`, each getting a share of
+// the time proportional to its length.
+export function spreadWords(text, start, end) {
+  const words = tokenize(text);
+  const total = words.reduce((sum, word) => sum + word.length, 0) || 1;
+  let used = 0;
+  return words.map((word) => {
+    const at = start + ((end - start) * used) / total;
+    used += word.length;
+    return { text: word, start: at };
+  });
+}
+
 // `body` is the line without its leading timestamps. In the "enhanced" format it carries
 // a timestamp before each word; text ahead of the first one is timed at `wordStart`.
 function buildLine(start, wordStart, body, shift) {
@@ -40,7 +53,7 @@ function buildLine(start, wordStart, body, shift) {
   return { start, end: Infinity, text: words.map((word) => word.text).join('').trim(), words };
 }
 
-export function parseLrc(source, { offsetMs = 0 } = {}) {
+export function parseLrc(source, { offsetMs = 0, keepEmpty = false } = {}) {
   let shift = offsetMs / 1000;
   let title = '';
   const lines = [];
@@ -64,7 +77,13 @@ export function parseLrc(source, { offsetMs = 0 } = {}) {
       starts.push(tagSeconds(match) + shift);
       body = body.slice(match[0].length);
     }
-    if (!starts.length || !body.trim()) continue;
+    if (!starts.length) continue;
+    if (!body.trim()) {
+      // A timed line with no words marks a gap. Lyrics skip it; a translation keeps it, so
+      // that its lines stay lined up with the original's.
+      if (keepEmpty) for (const start of starts) lines.push({ start, end: start, text: '', words: [] });
+      continue;
+    }
     // `search` ignores the lastIndex that a global regex would carry between lines.
     const wordStart = body.search(INLINE_TAG) !== -1 && starts.length > 1 ? starts.pop() : undefined;
     for (const start of starts) lines.push(buildLine(start, wordStart ?? start, body, shift));
@@ -76,12 +95,7 @@ export function parseLrc(source, { offsetMs = 0 } = {}) {
     line.end = Math.min(next, line.start + line.text.length * SECONDS_PER_CHAR);
     if (line.words.length > 1 && line.words.every((word) => word.start === line.start)) {
       // One timestamp for the whole line: spread the words by their length.
-      const total = line.words.reduce((sum, word) => sum + word.text.length, 0);
-      let used = 0;
-      for (const word of line.words) {
-        word.start += ((line.end - line.start) * used) / total;
-        used += word.text.length;
-      }
+      line.words = spreadWords(line.text, line.start, line.end);
     }
   });
   return { title, lines };
@@ -112,4 +126,16 @@ export function wordAt(line, time) {
   while (index > 0 && words[index].start > time) index--;
   const until = words[index + 1]?.start ?? Math.min(line.end, words[index].start + 2);
   return { index, fraction: clamp((time - words[index].start) / Math.max(until - words[index].start, 0.001), 0, 1) };
+}
+
+// Pairs a translation with the original, line by line and in order. A translated line takes
+// the timing of the original, since the original is what is being sung: it appears when
+// that line is sung, and its words light up at a reading pace. A line with no translation
+// keeps the original words, so nothing goes missing. Tells how many lines those were.
+export function alignTranslation(original, translated) {
+  const lines = original.map((line, index) => {
+    const text = translated[index]?.text;
+    return text ? { start: line.start, end: line.end, text, words: spreadWords(text, line.start, line.end) } : line;
+  });
+  return { lines, untranslated: original.filter((_, index) => !translated[index]?.text).length };
 }

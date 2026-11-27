@@ -3,7 +3,7 @@ import CONFIG from './config.js';
 import { createKaraoke } from './karaoke.js';
 import { createInfoButton } from './info.js';
 import { createOverlay } from './overlay.js';
-import { parseLrc } from './lyrics.js';
+import { alignTranslation, parseLrc } from './lyrics.js';
 
 const DEBUG = new URLSearchParams(location.search).has('debug');
 const $ = (id) => document.getElementById(id);
@@ -30,6 +30,7 @@ let overlay;
 let video;
 let audio;
 let karaoke;
+let lyricLanguages; // the lyrics in each language the sheet can show
 let wantMusic = false; // what the person asked for, so unlocking never pauses a song
 let unlocking = false; // the song is playing only to be allowed to play later
 let playButtonAt = null;
@@ -58,6 +59,7 @@ async function loadAssets() {
     { key: 'mask', url: CONFIG.animation.mask },
     { key: 'music', url: CONFIG.music.src },
     { key: 'lyrics', url: CONFIG.music.lyrics, text: true },
+    ...Object.entries(CONFIG.music.translations).map(([name, { file }]) => ({ key: `lyrics:${name}`, url: file, text: true })),
   ].filter((item) => item.url);
   const loaded = {};
   let received = 0;
@@ -115,11 +117,25 @@ function createMedia(loaded) {
   }
   // The sheet doubles as the pause control, so it exists even without lyrics.
   if (loaded.music || loaded.lyrics) {
-    const { title, lines } = parseLrc(loaded.lyrics || '', { offsetMs: CONFIG.music.offsetMs });
-    karaoke = createKaraoke(ui.lyrics, { lines });
-    const heading = ui.lyrics.querySelector('.title');
-    heading.textContent = title || CONFIG.music.title;
-    heading.classList.toggle('hidden', !heading.textContent);
+    const original = parseLrc(loaded.lyrics || '', { offsetMs: CONFIG.music.offsetMs });
+    const languages = {
+      original: {
+        label: CONFIG.music.originalLabel,
+        description: 'Letra original',
+        title: original.title || CONFIG.music.title,
+        lines: original.lines,
+      },
+    };
+    for (const [name, { file, label, description }] of Object.entries(CONFIG.music.translations)) {
+      const source = loaded[`lyrics:${name}`];
+      if (!source) continue; // missing or failed to load: its switch simply does not appear
+      const translation = parseLrc(source, { keepEmpty: true });
+      const { lines, untranslated } = alignTranslation(original.lines, translation.lines);
+      if (untranslated) warnings.push(`A tradução em ${name} (${file}) não cobre ${untranslated} linha(s); nessas aparece a original.`);
+      languages[name] = { label, description, title: translation.title || languages.original.title, lines };
+    }
+    karaoke = createKaraoke(ui.lyrics, { languages });
+    lyricLanguages = languages;
   }
 }
 
@@ -376,6 +392,11 @@ function createDebug() {
       line: ui.lyrics.querySelector('.current')?.textContent ?? null,
       activeWord: ui.lyrics.querySelector('.word.active')?.textContent ?? null,
       sungWords: ui.lyrics.querySelectorAll('.word.sung').length,
+      lang: karaoke?.language ?? null,
+      lineIndex: karaoke?.index ?? null,
+      lyricsText: lyricLanguages && Object.fromEntries(
+        Object.entries(lyricLanguages).map(([name, value]) => [name, value.lines.map((line) => line.text)])),
+      languages: [...ui.lyrics.querySelectorAll('.language button')].map((button) => button.dataset.lang),
       fps,
     }),
     // Page pixels of the overlay's corners: top-left, top-right, bottom-right, bottom-left.
