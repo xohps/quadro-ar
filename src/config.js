@@ -28,7 +28,7 @@ const CONFIG = {
   },
 
   // Where the play button sits on the print: 0 to 1 from the left and from the top.
-  playButton: { u: 0.79, v: 0.13 },
+  playButton: { u: 0.91, v: 0.95 }, // on the QR code
 
   // MindAR tuning. null keeps its defaults (warmup 5, miss 5, cutoff 0.001, beta 1000).
   // Higher "miss" keeps the overlay through longer dropouts; higher "beta" and lower
